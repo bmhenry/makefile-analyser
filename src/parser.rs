@@ -9,27 +9,26 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use lazy_static::lazy_static;
+use log::*;
 use regex::Regex;
+
 
 use crate::types::Target;
 
 
 pub struct Parser {
-    targets: Vec<String>,
+    targets: Vec<Target>,
     vars: HashMap<String,String>,
     match_var_def: Regex,
     match_target_def: Regex,
     match_output: Vec<Regex>,
-    match_self_var: Regex,
-    match_pvar: Regex,
-    match_cvar: Regex,
 }
 
 impl Parser {
     /// Create a new Parser
     pub fn new() -> Self {
         Parser {
-            targets: Vec::<String>::new(),
+            targets: Vec::<Target>::new(),
             vars: HashMap::<String,String>::new(),
             // assume that variables have no whitespace in front of them. while this isn't strictly
             // required by Make, in reality it's often an error otherwise.
@@ -47,12 +46,6 @@ impl Parser {
                 // match a specific comment with output location specifies
                 Regex::new(r"( {4}|\t)+#[ \t]*Output[ \t]*:[ \t]*(?P<path>[^\s]+)").unwrap(),
             ],
-            // only matches $@
-            match_self_var: Regex::new(r"\$(?P<value>@)").unwrap(),
-            // matches a $(varname)
-            match_pvar: Regex::new(r"\$\((?P<value>[^\s:#={}()\[\]/\\]+)\)").unwrap(),
-            // matches a ${varname}
-            match_cvar: Regex::new(r"\$\{(?P<value>[^\s:#={}()\[\]/\\]+)\}").unwrap(),
         }
     }
 
@@ -66,9 +59,6 @@ impl Parser {
         };
         let mut reader = BufReader::new(file);
 
-        // list of all found targets & their respective outputs
-        let mut targets = Vec::<Target>::new();
-
         // check each line in the file to see if it matches
         loop {
             let mut line = String::new();
@@ -79,7 +69,7 @@ impl Parser {
                         break;
                     }
 
-                    println!("DEBUG: line = {}", line);
+                    debug!("line: '{}'", line.trim_end());
 
                     // resolve any variables in the line
                     let line = match self.eval_variable(&line, vec![]) {
@@ -90,10 +80,10 @@ impl Parser {
                     // match against makefile targets
                     if let Some(matches) = self.match_target_def.captures(&line) {
                         let mut t = Target::new(matches["target"].to_string());
-                        if targets.is_empty() {
+                        if self.targets.is_empty() {
                             t.default = true;
                         }
-                        targets.push(t);
+                        self.targets.push(t);
                         // add a variable with the name `@` that will resolve to the current target
                         self.vars.insert("@".to_string(), matches["target"].to_string());
                     }
@@ -102,17 +92,17 @@ impl Parser {
                         self.vars.insert(matches["name"].to_string(), matches["value"].to_string());
                     }
                     // match against output types
-                    else if !targets.is_empty() && targets[targets.len() - 1].output.is_none() {
+                    else if !self.targets.is_empty() && self.targets[self.targets.len() - 1].output.is_none() {
                         // match the first output type found
                         for (i, output) in self.match_output.iter().enumerate() {
                             if let Some(matches) = output.captures(&line) {
-                                println!("DEBUG: Found output match on output regex {}", i);
+                                debug!("Found output match on output regex {}", i);
                                 // get the value of the output
                                 let val = matches["path"].to_string();
-                                println!("DEBUG: output: '{}'", val);
+                                debug!("output: '{}'", val);
 
-                                let idx = targets.len() - 1;
-                                targets[idx].output = Some(val);
+                                let idx = self.targets.len() - 1;
+                                self.targets[idx].output = Some(val);
                             }
                         }
                     }
@@ -121,7 +111,7 @@ impl Parser {
             }
         }
 
-        Ok(targets)
+        Ok(self.targets.clone())
     }
 
     /// Evaluate a variable recursively until the actual value is determined, using other
@@ -135,7 +125,7 @@ impl Parser {
         }
 
         let mut new = value.to_string();
-        println!("DEBUG: running eval on {}", new);
+        debug!("running eval on '{}'", new.trim_end());
 
         // try matching against different variable types
         while let Some(range) = SELFVAR
@@ -148,7 +138,7 @@ impl Parser {
 
             // get the relevant section of the value
             let wrapped_var = &new[range.clone()];
-            println!("DEBUG: wrapped var: '{}'", wrapped_var);
+            debug!("wrapped var: '{}'", wrapped_var);
 
             // unwrap the variable name
             let varname = if vec!["${", "$("].contains(&&wrapped_var[0..2]) {
@@ -156,7 +146,7 @@ impl Parser {
             } else {
                 &wrapped_var[1..wrapped_var.len()]
             };
-            println!("DEBUG: found variable named {}", varname);
+            debug!("found variable named {}", varname);
 
             // make sure the variable doesn't already exist up the dependency chain
             if deps.contains(&varname) {
@@ -169,7 +159,7 @@ impl Parser {
             } else {
                 return Err(format!("No variable '{}'", varname));
             };
-            println!("DEBUG: variable value {}", value);
+            debug!("variable value {}", value);
 
             // recusrively evaluate variable values
             match self.eval_variable(&value, {
@@ -178,8 +168,8 @@ impl Parser {
                 newdeps
             }) {
                 Ok(evald) => {
-                    println!(
-                        "DEBUG: replacing '{}' with '{}'",
+                    debug!(
+                        "replacing '{}' with '{}'",
                         &new[range.clone()],
                         &evald
                     );
@@ -191,7 +181,7 @@ impl Parser {
             }
         }
 
-        println!("DEBUG: evald line is {}", new);
+        debug!("eval'd line: '{}'", new.trim_end());
 
         Ok(new)
     }
