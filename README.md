@@ -1,17 +1,26 @@
 # Target Analyzer
 
-Parses a Makefile for callable targets.
+Parses a Makefile for callable targets and their respective outputs.
 
 
 ## Why?
 
-Yeah, this would be a pretty simple bash script. 
-But I felt like doing it in Rust, for no particular reason.
-However, it is at least twice as fast as a bash script, so I guess there's that.
+It can be useful to programmatically determine what targets are available in a Makefile, and what potential
+outputs are associated with each of those targets.
+* You followed some build instructions, but don't know where to find the built product
+* You want to build something in particular, but don't know which `make` target to call to get that output
+* You're interested in all potential outputs of a Makefile
+
+Originally, this was simple enough to be done in a Bash script (and probably could still be done that way),
+but there's enough parsing included that it's worth writing with Rust's powerful & fast regex engine.
 
 
-## Todo
+## Parsing Requirements
 
-* [ ] For each target, try to determine what (if any) output file is associated with it, and return that as well
-* [ ] Determine the default argument
+* Variables should be defined at the start of a line, with no whitespace before the variable name.
+* The parser will expect one output per target, which may be either a file or a directory
+	* The parser will attempt to automatically determine the output
+	* An output may be specified manually with a `# Output: <path>` comment line as the first line of a target,
+		for targets which output multiple items into a directory that was created in a different step
+	* The first output found will be the one returned
 
