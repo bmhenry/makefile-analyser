@@ -1,7 +1,6 @@
 ///
 /// Parses a Makefile for targets & output information
 ///
-
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -13,7 +12,6 @@ use serde_json::to_string_pretty;
 use simplelog::*;
 
 use makeparse::parser::Parser;
-
 
 // TODO: resolve ?= with env variables if they exist
 // TODO: refactor to use a struct and not do everything in main
@@ -55,37 +53,44 @@ fn main() {
         .get_matches();
 
     // initialize the logger
-    let loglevel = if matches.is_present("debug") { LevelFilter::Debug } else { LevelFilter::Error };
+    let loglevel = if matches.is_present("debug") {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Error
+    };
     let mut try_term_log = !matches.is_present("logfile");
 
+    // if a logfile was specified, try to init a log writer for that file
     if !try_term_log {
         match File::create(matches.value_of("logfile").unwrap()) {
             Ok(f) => {
-                if let Err(_) = WriteLogger::init(loglevel, Config::default(), f) {
-                    try_term_log = true
+                if let Err(e) = WriteLogger::init(loglevel, Config::default(), f) {
+                    eprintln!(
+                        "Failed to initialize file logger ({}); writing to terminal instead",
+                        e
+                    );
+                    try_term_log = true;
                 }
-            },
+            }
             Err(e) => {
-                eprintln!("Failed to create logfile ({}); writing to terminal instead", e);
+                eprintln!(
+                    "Failed to create logfile ({}); writing to terminal instead",
+                    e
+                );
                 try_term_log = true;
             }
         }
     }
 
+    // if no logfile was specified or one couldn't be created, try to log to the terminal
     if try_term_log {
         if let Err(e) = TermLogger::init(loglevel, Config::default(), TerminalMode::Mixed)
-            .or_else(|_| {
-                SimpleLogger::init(
-                    LevelFilter::Error, 
-                    Config::default()
-                )
-            })
+            .or_else(|_| SimpleLogger::init(LevelFilter::Error, Config::default()))
         {
             eprintln!("Failed to initialize a logger: {}", e);
             // exit(1);
         }
     }
-
 
     // check to see if a valid path was given
     let filepath = Path::new(matches.value_of("INPUT").unwrap());
@@ -95,7 +100,7 @@ fn main() {
     }
 
     let mut parser = Parser::new();
-    let targets = match parser.parse_file(filepath) {
+    let targets = match parser.parse_file(filepath, matches.is_present("strict")) {
         Ok(t) => t,
         Err(e) => {
             error!("Failed to parse {}: {}", filepath.display(), e);

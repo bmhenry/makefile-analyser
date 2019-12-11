@@ -1,6 +1,6 @@
 //!
 //! Contains parser functionality
-//! 
+//!
 
-pub mod types;
 pub mod parser;
+pub mod types;
