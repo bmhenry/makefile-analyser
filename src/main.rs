@@ -14,10 +14,7 @@ use simplelog::*;
 use makeparse::parser::Parser;
 
 // TODO: resolve ?= with env variables if they exist
-// TODO: refactor to use a struct and not do everything in main
-// TODO: change debug prints to debug logs
 // TODO: handle included makefiles
-// TODO: implement strict handler
 
 fn main() {
     // parse command line arguments
