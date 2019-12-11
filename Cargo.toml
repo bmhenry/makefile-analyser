@@ -1,5 +1,5 @@
 [package]
-name = "makefile-analyzer"
+name = "makeparse"
 version = "0.1.0"
 authors = ["Brandon Henry <brandon@bhenry.dev>"]
 edition = "2018"

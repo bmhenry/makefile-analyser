@@ -23,4 +23,4 @@ but there's enough parsing included that it's worth writing with Rust's powerful
 	* An output may be specified manually with a `# Output: <path>` comment line as the first line of a target,
 		for targets which output multiple items into a directory that was created in a different step
 	* The first output found will be the one returned
-
+* This parser expects output paths to be simple, i.e. no string concatenation or other tricks. The parser doesn't implement Bash.
