@@ -113,14 +113,16 @@ fn generate_cli<'a, 'b>() -> clap::App<'a, 'b> {
                 .long("filter")
                 .value_name("REGEX")
                 .takes_value(true)
-                .multiple(true))
+                .multiple(true)
+                .number_of_values(1))
         .arg(Arg::with_name("include")
                 .help("Only include targets that match the regex specified")
                 .short("i")
                 .long("include")
                 .value_name("REGEX")
                 .takes_value(true)
-                .multiple(true))
+                .multiple(true)
+                .number_of_values(1))
 }
 
 /// Set up the logger, dependent on user selection. If specified, the logger will attempt
