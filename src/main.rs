@@ -8,13 +8,21 @@ use std::process::exit;
 
 use clap::{App, Arg};
 use log::*;
+
 use serde_json::to_string_pretty;
 use simplelog::*;
 
 use makeparse::parser::Parser;
+use makeparse::filter::*;
 
 // TODO: resolve ?= with env variables if they exist
 // TODO: handle included makefiles
+// TODO: support cargo somehow?
+// TODO: save multiple outputs in a vec per target
+// TODO:   ^ have an option to condense outputs if they all fall into an output folder
+// TODO: support `cp` for outputs
+// TODO: possibly look at dependency targets and get their outputs as well
+// TODO: support an output filter
 
 fn main() {
     // parse command line arguments
@@ -22,19 +30,15 @@ fn main() {
         .version("0.1.0")
         .author("Brandon Henry <brandon@bhenry.dev>")
         .about("Analyzes a Makefile's targets and outputs")
-        .arg(
-            Arg::with_name("INPUT")
+        .arg(Arg::with_name("INPUT")
                 .help("Makefile to be parsed")
-                .required(true),
-        )
-        .arg(
-            Arg::with_name("output")
+                .required(true))
+        .arg(Arg::with_name("output")
                 .help("Output file to write JSON results to (stdout by default)")
                 .short("o")
                 .long("output")
                 .value_name("FILE")
-                .takes_value(true),
-        )
+                .takes_value(true))
         .arg(Arg::with_name("strict")
                 .help("Fail on any parser error")
                 .short("s")
@@ -43,10 +47,27 @@ fn main() {
                 .help("Enable debug logging")
                 .long("debug"))
         .arg(Arg::with_name("logfile")
-                .help("Specify a file to write error messages (stderr by default) & debug logs (stdout by default) to")
+                .help("Specify a file to write log messages to")
+                .long_help(
+                    "Specify a file to write log messages to. \
+                    Otherwise, error messages default to stderr, and debug logs default to stdout")
                 .long("log")
                 .value_name("FILE")
                 .takes_value(true))
+        .arg(Arg::with_name("filter")
+                .help("Filter out targets that match the regex specified")
+                .short("f")
+                .long("filter")
+                .value_name("REGEX")
+                .takes_value(true)
+                .multiple(true))
+        .arg(Arg::with_name("include")
+                .help("Only include targets that match the regex specified")
+                .short("i")
+                .long("include")
+                .value_name("REGEX")
+                .takes_value(true)
+                .multiple(true))
         .get_matches();
 
     // initialize the logger
@@ -96,14 +117,22 @@ fn main() {
         exit(1);
     }
 
+    let strict_mode = matches.is_present("strict");
     let mut parser = Parser::new();
-    let targets = match parser.parse_file(filepath, matches.is_present("strict")) {
+    let targets = match parser.parse_file(filepath, strict_mode) {
         Ok(t) => t,
         Err(e) => {
             error!("Failed to parse {}: {}", filepath.display(), e);
             exit(1);
         }
     };
+
+    // apply any user filters to remove unwanted targets
+    let targets = filter_targets(
+        targets, 
+        strict_mode, 
+        matches.values_of("filter"), 
+        matches.values_of("include"));
 
     let ser_output = to_string_pretty(&targets).unwrap();
 

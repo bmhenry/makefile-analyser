@@ -34,7 +34,8 @@ impl Parser {
             match_var_def: Regex::new(r"^(?P<name>[^\s:#=]+)(\s)*[?:]?=(\s)*(?P<value>[^\n\r#]+)")
                 .unwrap(),
             // search for lines starting with a word followed by ':'
-            match_target_def: Regex::new(r"^(?P<target>[\w]+):").unwrap(),
+            // we specifically need to prevent the .PHONY keyword from being recognized
+            match_target_def: Regex::new(r"^(?P<target>[^.PHONY][^\s:#=]+):").unwrap(),
             // a list of recognized output types
             // requires indentation under a target
             match_output: vec![
@@ -90,9 +91,10 @@ impl Parser {
                             if strict {
                                 return Err(format!("Line variable expansion failed: {}", e));
                             }
-                            // otherwise, go to the next line
+                            // otherwise, continue with non-evaluated line
                             else {
-                                continue;
+                                debug!("Eval of {} failed; skipping evaluation", line.trim_end());
+                                // continue;
                             }
                         }
                     };
@@ -102,7 +104,6 @@ impl Parser {
                         debug!("Found target '{}'", &matches["target"]);
 
                         let mut t = Target::new(matches["target"].to_string());
-
 
                         if self.targets.is_empty() {
                             t.default = true;
