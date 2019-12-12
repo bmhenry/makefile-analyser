@@ -47,6 +47,8 @@ impl Parser {
                 Regex::new(r"( {4}|\t)+(mkdir)([^\n\r])*\b(?P<path>[^\n\r]+)\b").unwrap(),
                 // match arbitrary stuff until -o is found
                 Regex::new(r"( {4}|\t)+[^\n\r#]*-o(\s)+(?P<path>[^\s]+)").unwrap(),
+                // match copied files
+                Regex::new(r"( {4}|\t)+(cp)[^\n\r#]*(\s)+(?P<path>[^\s]+)").unwrap(),
             ],
             match_comment: Regex::new(r"^( {4}|\t)*#").unwrap(),
         }
@@ -122,7 +124,6 @@ impl Parser {
                     }
                     // match against output types
                     else if !self.targets.is_empty()
-                        && self.targets[self.targets.len() - 1].output.is_none()
                     {
                         // match the first output type found
                         for (i, output) in self.match_output.iter().enumerate() {
@@ -133,12 +134,23 @@ impl Parser {
                                 debug!("output: '{}'", val);
 
                                 let idx = self.targets.len() - 1;
-                                self.targets[idx].output = Some(val);
+                                self.targets[idx].output
+                                    .get_or_insert(Vec::<String>::new())
+                                    .push(val);
                             }
                         }
                     }
                 }
                 Err(e) => return Err(format!("Failed to read from file: {:?}", e)),
+            }
+        }
+
+        // remove any duplicates
+        // self.targets.dedup_by_key(|target| &target.name);
+        self.targets.dedup();
+        for target in &mut self.targets {
+            if let Some(outputs) = &mut target.output {
+                outputs.dedup();
             }
         }
 

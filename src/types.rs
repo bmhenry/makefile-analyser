@@ -11,7 +11,7 @@ pub struct Target {
     // whether this is the default (first) target or not
     pub default: bool,
     // output path associated with the target (may be a file or folder)
-    pub output: Option<String>,
+    pub output: Option<Vec<String>>,
 }
 
 impl Target {
@@ -21,5 +21,11 @@ impl Target {
             default: false,
             output: None,
         }
+    }
+}
+
+impl PartialEq for Target {
+    fn eq(&self, other: &Target) -> bool {
+        self.name == other.name.as_str()
     }
 }

@@ -18,15 +18,68 @@ use makeparse::filter::*;
 // TODO: resolve ?= with env variables if they exist
 // TODO: handle included makefiles
 // TODO: support cargo somehow?
-// TODO: save multiple outputs in a vec per target
-// TODO:   ^ have an option to condense outputs if they all fall into an output folder
-// TODO: support `cp` for outputs
+// TODO: have an option to condense outputs if they all fall into an output folder/have a common parent
 // TODO: possibly look at dependency targets and get their outputs as well
 // TODO: support an output filter
 
 fn main() {
     // parse command line arguments
-    let matches = App::new("makefile-analyzer")
+    let matches = generate_cli().get_matches();
+
+    // in strict mode, failure to parse/filter/etc. will be a fatal error
+    let strict_mode = matches.is_present("strict");
+
+    // initialize the logger
+    initialize_logger(matches.is_present("logfile"), matches.value_of("logfile"), matches.is_present("debug"));
+
+    // check to see if a valid path was given
+    let filepath = Path::new(matches.value_of("INPUT").unwrap());
+    if !filepath.exists() {
+        error!("File {} doesn't exist", filepath.display());
+        exit(1);
+    }
+
+    // parse the input file
+    let mut parser = Parser::new();
+    let targets = match parser.parse_file(filepath, strict_mode) {
+        Ok(t) => t,
+        Err(e) => {
+            error!("Failed to parse {}: {}", filepath.display(), e);
+            exit(1);
+        }
+    };
+
+    // apply any user filters to remove unwanted targets
+    let targets = filter_targets(
+        targets, 
+        strict_mode, 
+        matches.values_of("filter"), 
+        matches.values_of("include"));
+
+    let ser_output = to_string_pretty(&targets).unwrap();
+
+    // save the output to a file if specified, otherwise write to stdout
+    if let Some(path) = matches.value_of("output") {
+        let mut file = match File::create(path) {
+            Ok(f) => f,
+            Err(e) => {
+                error!("Failed to create output file: {}", e);
+                exit(1);
+            }
+        };
+
+        if let Err(e) = file.write_all(ser_output.as_bytes()) {
+            error!("Failed to write to output file: {}", e);
+            exit(1);
+        }
+    } else {
+        println!("{}", ser_output);
+    }
+}
+
+/// Set up the CLI argument matching structure
+fn generate_cli<'a, 'b>() -> clap::App<'a, 'b> {
+    App::new("makefile-analyzer")
         .version("0.1.0")
         .author("Brandon Henry <brandon@bhenry.dev>")
         .about("Analyzes a Makefile's targets and outputs")
@@ -68,19 +121,18 @@ fn main() {
                 .value_name("REGEX")
                 .takes_value(true)
                 .multiple(true))
-        .get_matches();
+}
 
-    // initialize the logger
-    let loglevel = if matches.is_present("debug") {
-        LevelFilter::Debug
-    } else {
-        LevelFilter::Error
-    };
-    let mut try_term_log = !matches.is_present("logfile");
+/// Set up the logger, dependent on user selection. If specified, the logger will attempt
+/// to use a logfile. Otherwise, it will log to the terminal with color. A basic terminal
+/// logger with only text output is used as a fallback.
+fn initialize_logger(log_to_file: bool, logfile: Option<&str>, is_debug: bool) {
+    let mut try_term_log = !log_to_file;
+    let loglevel = if is_debug { LevelFilter::Debug } else { LevelFilter::Error };
 
     // if a logfile was specified, try to init a log writer for that file
     if !try_term_log {
-        match File::create(matches.value_of("logfile").unwrap()) {
+        match File::create(logfile.unwrap()) {
             Ok(f) => {
                 if let Err(e) = WriteLogger::init(loglevel, Config::default(), f) {
                     eprintln!(
@@ -108,49 +160,5 @@ fn main() {
             eprintln!("Failed to initialize a logger: {}", e);
             // exit(1);
         }
-    }
-
-    // check to see if a valid path was given
-    let filepath = Path::new(matches.value_of("INPUT").unwrap());
-    if !filepath.exists() {
-        error!("File {} doesn't exist", filepath.display());
-        exit(1);
-    }
-
-    let strict_mode = matches.is_present("strict");
-    let mut parser = Parser::new();
-    let targets = match parser.parse_file(filepath, strict_mode) {
-        Ok(t) => t,
-        Err(e) => {
-            error!("Failed to parse {}: {}", filepath.display(), e);
-            exit(1);
-        }
-    };
-
-    // apply any user filters to remove unwanted targets
-    let targets = filter_targets(
-        targets, 
-        strict_mode, 
-        matches.values_of("filter"), 
-        matches.values_of("include"));
-
-    let ser_output = to_string_pretty(&targets).unwrap();
-
-    // save the output to a file if specified, otherwise write to stdout
-    if let Some(path) = matches.value_of("output") {
-        let mut file = match File::create(path) {
-            Ok(f) => f,
-            Err(e) => {
-                error!("Failed to create output file: {}", e);
-                exit(1);
-            }
-        };
-
-        if let Err(e) = file.write_all(ser_output.as_bytes()) {
-            error!("Failed to write to output file: {}", e);
-            exit(1);
-        }
-    } else {
-        println!("{}", ser_output);
     }
 }
